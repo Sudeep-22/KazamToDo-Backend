@@ -6,7 +6,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
-      res.sendStatus(401);
+      res.status(401).json({ error: 'Authorization header missing or malformed' });
       return;
     }
 
@@ -15,15 +15,23 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     // Check if token is blacklisted
     const isRevoked = await RevokedToken.findOne({ token });
     if (isRevoked) {
-      res.sendStatus(403);
+      res.status(403).json({ error: 'Token has been revoked' });
       return;
     }
 
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
     (req as any).userId = payload.userId;
 
-    next(); // continue to next middleware
-  } catch (err) {
-    res.sendStatus(401);
+    next();
+  } catch (err: any) {
+    console.error('JWT Verification Error:', err);
+
+    if (err.name === 'TokenExpiredError') {
+      res.status(401).json({ error: 'Access token expired' });
+    } else if (err.name === 'JsonWebTokenError') {
+      res.status(401).json({ error: 'Invalid token' });
+    } else {
+      res.status(401).json({ error: 'Unauthorized' });
+    }
   }
 };
